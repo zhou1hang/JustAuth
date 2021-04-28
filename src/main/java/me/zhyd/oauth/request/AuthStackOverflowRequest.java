@@ -1,18 +1,24 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
+import com.xkcoding.http.constants.Constants;
+import com.xkcoding.http.support.HttpHeader;
+import com.xkcoding.http.util.MapUtil;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
 import me.zhyd.oauth.enums.AuthUserGender;
+import me.zhyd.oauth.enums.scope.AuthStackoverflowScope;
 import me.zhyd.oauth.exception.AuthException;
 import me.zhyd.oauth.model.AuthCallback;
 import me.zhyd.oauth.model.AuthToken;
 import me.zhyd.oauth.model.AuthUser;
+import me.zhyd.oauth.utils.AuthScopeUtils;
+import me.zhyd.oauth.utils.HttpUtils;
 import me.zhyd.oauth.utils.UrlBuilder;
 
-import static me.zhyd.oauth.config.AuthSource.STACK_OVERFLOW;
-import static me.zhyd.oauth.utils.GlobalAuthUtil.parseQueryToMap;
+import java.util.Map;
+
+import static me.zhyd.oauth.config.AuthDefaultSource.STACK_OVERFLOW;
 
 /**
  * Stack Overflow登录
@@ -26,14 +32,19 @@ public class AuthStackOverflowRequest extends AuthDefaultRequest {
         super(config, STACK_OVERFLOW);
     }
 
+    public AuthStackOverflowRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, STACK_OVERFLOW, authStateCache);
+    }
+
     @Override
     protected AuthToken getAccessToken(AuthCallback authCallback) {
         String accessTokenUrl = accessTokenUrl(authCallback.getCode());
-        HttpResponse response = HttpRequest.post(accessTokenUrl)
-            .contentType("application/x-www-form-urlencoded")
-            .form(parseQueryToMap(accessTokenUrl))
-            .execute();
-        JSONObject accessTokenObject = JSONObject.parseObject(response.body());
+        Map<String, String> form = MapUtil.parseStringToMap(accessTokenUrl, false);
+        HttpHeader httpHeader = new HttpHeader();
+        httpHeader.add(Constants.CONTENT_TYPE, "application/x-www-form-urlencoded");
+        String response = new HttpUtils(config.getHttpConfig()).post(accessTokenUrl, form, httpHeader, false);
+
+        JSONObject accessTokenObject = JSONObject.parseObject(response);
         this.checkResponse(accessTokenObject);
 
         return AuthToken.builder()
@@ -49,12 +60,13 @@ public class AuthStackOverflowRequest extends AuthDefaultRequest {
             .queryParam("site", "stackoverflow")
             .queryParam("key", this.config.getStackOverflowKey())
             .build();
-        HttpResponse response = HttpRequest.get(userInfoUrl).execute();
-        JSONObject object = JSONObject.parseObject(response.body());
+        String response = new HttpUtils(config.getHttpConfig()).get(userInfoUrl);
+        JSONObject object = JSONObject.parseObject(response);
         this.checkResponse(object);
         JSONObject userObj = object.getJSONArray("items").getJSONObject(0);
 
         return AuthUser.builder()
+            .rawUserInfo(userObj)
             .uuid(userObj.getString("user_id"))
             .avatar(userObj.getString("profile_image"))
             .location(userObj.getString("location"))
@@ -62,7 +74,7 @@ public class AuthStackOverflowRequest extends AuthDefaultRequest {
             .blog(userObj.getString("website_url"))
             .gender(AuthUserGender.UNKNOWN)
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 
@@ -75,12 +87,8 @@ public class AuthStackOverflowRequest extends AuthDefaultRequest {
      */
     @Override
     public String authorize(String state) {
-        return UrlBuilder.fromBaseUrl(source.authorize())
-            .queryParam("response_type", "code")
-            .queryParam("client_id", config.getClientId())
-            .queryParam("redirect_uri", config.getRedirectUri())
-            .queryParam("scope", "read_inbox")
-            .queryParam("state", getRealState(state))
+        return UrlBuilder.fromBaseUrl(super.authorize(state))
+            .queryParam("scope", this.getScopes(",", false, AuthScopeUtils.getDefaultScopes(AuthStackoverflowScope.values())))
             .build();
     }
 

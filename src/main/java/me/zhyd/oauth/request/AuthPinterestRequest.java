@@ -1,19 +1,21 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
 import me.zhyd.oauth.enums.AuthUserGender;
+import me.zhyd.oauth.enums.scope.AuthPinterestScope;
 import me.zhyd.oauth.exception.AuthException;
 import me.zhyd.oauth.model.AuthCallback;
 import me.zhyd.oauth.model.AuthToken;
 import me.zhyd.oauth.model.AuthUser;
+import me.zhyd.oauth.utils.AuthScopeUtils;
+import me.zhyd.oauth.utils.HttpUtils;
 import me.zhyd.oauth.utils.UrlBuilder;
 
 import java.util.Objects;
 
-import static me.zhyd.oauth.config.AuthSource.PINTEREST;
+import static me.zhyd.oauth.config.AuthDefaultSource.PINTEREST;
 
 /**
  * Pinterest登录
@@ -29,10 +31,14 @@ public class AuthPinterestRequest extends AuthDefaultRequest {
         super(config, PINTEREST);
     }
 
+    public AuthPinterestRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, PINTEREST, authStateCache);
+    }
+
     @Override
     protected AuthToken getAccessToken(AuthCallback authCallback) {
-        HttpResponse response = doPostAuthorizationCode(authCallback.getCode());
-        JSONObject accessTokenObject = JSONObject.parseObject(response.body());
+        String response = doPostAuthorizationCode(authCallback.getCode());
+        JSONObject accessTokenObject = JSONObject.parseObject(response);
         this.checkResponse(accessTokenObject);
         return AuthToken.builder()
             .accessToken(accessTokenObject.getString("access_token"))
@@ -43,11 +49,13 @@ public class AuthPinterestRequest extends AuthDefaultRequest {
     @Override
     protected AuthUser getUserInfo(AuthToken authToken) {
         String userinfoUrl = userInfoUrl(authToken);
-        HttpResponse response = HttpRequest.get(userinfoUrl).setFollowRedirects(true).execute();
-        JSONObject object = JSONObject.parseObject(response.body());
+        // TODO: 是否需要 .setFollowRedirects(true)
+        String response = new HttpUtils(config.getHttpConfig()).get(userinfoUrl);
+        JSONObject object = JSONObject.parseObject(response);
         this.checkResponse(object);
         JSONObject userObj = object.getJSONObject("data");
         return AuthUser.builder()
+            .rawUserInfo(userObj)
             .uuid(userObj.getString("id"))
             .avatar(getAvatarUrl(userObj))
             .username(userObj.getString("username"))
@@ -55,7 +63,7 @@ public class AuthPinterestRequest extends AuthDefaultRequest {
             .gender(AuthUserGender.UNKNOWN)
             .remark(userObj.getString("bio"))
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 
@@ -77,12 +85,8 @@ public class AuthPinterestRequest extends AuthDefaultRequest {
      */
     @Override
     public String authorize(String state) {
-        return UrlBuilder.fromBaseUrl(source.authorize())
-            .queryParam("response_type", "code")
-            .queryParam("client_id", config.getClientId())
-            .queryParam("redirect_uri", config.getRedirectUri())
-            .queryParam("scope", "read_public")
-            .queryParam("state", getRealState(state))
+        return UrlBuilder.fromBaseUrl(super.authorize(state))
+            .queryParam("scope", this.getScopes(",", false, AuthScopeUtils.getDefaultScopes(AuthPinterestScope.values())))
             .build();
     }
 

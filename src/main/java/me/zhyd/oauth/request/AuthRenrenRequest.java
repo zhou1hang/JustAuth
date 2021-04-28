@@ -1,18 +1,24 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.xkcoding.http.util.UrlUtil;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
 import me.zhyd.oauth.enums.AuthUserGender;
+import me.zhyd.oauth.enums.scope.AuthRenrenScope;
 import me.zhyd.oauth.exception.AuthException;
-import me.zhyd.oauth.model.*;
+import me.zhyd.oauth.model.AuthCallback;
+import me.zhyd.oauth.model.AuthResponse;
+import me.zhyd.oauth.model.AuthToken;
+import me.zhyd.oauth.model.AuthUser;
+import me.zhyd.oauth.utils.AuthScopeUtils;
+import me.zhyd.oauth.utils.HttpUtils;
 import me.zhyd.oauth.utils.UrlBuilder;
 
 import java.util.Objects;
 
-import static me.zhyd.oauth.config.AuthSource.RENREN;
+import static me.zhyd.oauth.config.AuthDefaultSource.RENREN;
 import static me.zhyd.oauth.enums.AuthResponseStatus.SUCCESS;
 
 /**
@@ -27,6 +33,10 @@ public class AuthRenrenRequest extends AuthDefaultRequest {
         super(config, RENREN);
     }
 
+    public AuthRenrenRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, RENREN, authStateCache);
+    }
+
     @Override
     protected AuthToken getAccessToken(AuthCallback authCallback) {
         return this.getToken(accessTokenUrl(authCallback.getCode()));
@@ -34,17 +44,18 @@ public class AuthRenrenRequest extends AuthDefaultRequest {
 
     @Override
     protected AuthUser getUserInfo(AuthToken authToken) {
-        HttpResponse response = doGetUserInfo(authToken);
-        JSONObject userObj = JSONObject.parseObject(response.body()).getJSONObject("response");
+        String response = doGetUserInfo(authToken);
+        JSONObject userObj = JSONObject.parseObject(response).getJSONObject("response");
 
         return AuthUser.builder()
+            .rawUserInfo(userObj)
             .uuid(userObj.getString("id"))
             .avatar(getAvatarUrl(userObj))
             .nickname(userObj.getString("name"))
             .company(getCompany(userObj))
             .gender(getGender(userObj))
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 
@@ -57,8 +68,8 @@ public class AuthRenrenRequest extends AuthDefaultRequest {
     }
 
     private AuthToken getToken(String url) {
-        HttpResponse response = HttpRequest.post(url).execute();
-        JSONObject jsonObject = JSONObject.parseObject(response.body());
+        String response = new HttpUtils(config.getHttpConfig()).post(url);
+        JSONObject jsonObject = JSONObject.parseObject(response);
         if (jsonObject.containsKey("error")) {
             throw new AuthException("Failed to get token from Renren: " + jsonObject);
         }
@@ -66,8 +77,8 @@ public class AuthRenrenRequest extends AuthDefaultRequest {
         return AuthToken.builder()
             .tokenType(jsonObject.getString("token_type"))
             .expireIn(jsonObject.getIntValue("expires_in"))
-            .accessToken(jsonObject.getString("access_token"))
-            .refreshToken(jsonObject.getString("refresh_token"))
+            .accessToken(UrlUtil.urlEncode(jsonObject.getString("access_token")))
+            .refreshToken(UrlUtil.urlEncode(jsonObject.getString("refresh_token")))
             .openId(jsonObject.getJSONObject("user").getString("id"))
             .build();
     }
@@ -107,6 +118,13 @@ public class AuthRenrenRequest extends AuthDefaultRequest {
         return UrlBuilder.fromBaseUrl(source.userInfo())
             .queryParam("access_token", authToken.getAccessToken())
             .queryParam("userId", authToken.getOpenId())
+            .build();
+    }
+
+    @Override
+    public String authorize(String state) {
+        return UrlBuilder.fromBaseUrl(super.authorize(state))
+            .queryParam("scope", this.getScopes(",", false, AuthScopeUtils.getDefaultScopes(AuthRenrenScope.values())))
             .build();
     }
 }

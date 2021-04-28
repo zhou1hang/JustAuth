@@ -1,21 +1,20 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
-import lombok.extern.slf4j.Slf4j;
+import com.xkcoding.http.util.UrlUtil;
+import me.zhyd.oauth.cache.AuthDefaultStateCache;
 import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
 import me.zhyd.oauth.config.AuthSource;
 import me.zhyd.oauth.enums.AuthResponseStatus;
 import me.zhyd.oauth.exception.AuthException;
+import me.zhyd.oauth.log.Log;
 import me.zhyd.oauth.model.AuthCallback;
 import me.zhyd.oauth.model.AuthResponse;
 import me.zhyd.oauth.model.AuthToken;
 import me.zhyd.oauth.model.AuthUser;
-import me.zhyd.oauth.utils.AuthChecker;
-import me.zhyd.oauth.utils.StringUtils;
-import me.zhyd.oauth.utils.UrlBuilder;
-import me.zhyd.oauth.utils.UuidUtils;
+import me.zhyd.oauth.utils.*;
+
+import java.util.List;
 
 /**
  * 默认的request处理类
@@ -24,16 +23,21 @@ import me.zhyd.oauth.utils.UuidUtils;
  * @author yangkai.shen (https://xkcoding.com)
  * @since 1.0.0
  */
-@Slf4j
 public abstract class AuthDefaultRequest implements AuthRequest {
     protected AuthConfig config;
     protected AuthSource source;
+    protected AuthStateCache authStateCache;
 
     public AuthDefaultRequest(AuthConfig config, AuthSource source) {
+        this(config, source, AuthDefaultStateCache.INSTANCE);
+    }
+
+    public AuthDefaultRequest(AuthConfig config, AuthSource source, AuthStateCache authStateCache) {
         this.config = config;
         this.source = source;
+        this.authStateCache = authStateCache;
         if (!AuthChecker.isSupportedAuth(config, source)) {
-            throw new AuthException(AuthResponseStatus.PARAMETER_INCOMPLETE);
+            throw new AuthException(AuthResponseStatus.PARAMETER_INCOMPLETE, source);
         }
         // 校验配置合法性
         AuthChecker.checkConfig(config, source);
@@ -68,14 +72,16 @@ public abstract class AuthDefaultRequest implements AuthRequest {
     @Override
     public AuthResponse login(AuthCallback authCallback) {
         try {
-            AuthChecker.checkCode(source == AuthSource.ALIPAY ? authCallback.getAuth_code() : authCallback.getCode());
-            AuthChecker.checkState(authCallback.getState());
+            AuthChecker.checkCode(source, authCallback);
+            if (!config.isIgnoreCheckState()) {
+                AuthChecker.checkState(authCallback.getState(), source, authStateCache);
+            }
 
             AuthToken authToken = this.getAccessToken(authCallback);
             AuthUser user = this.getUserInfo(authToken);
             return AuthResponse.builder().code(AuthResponseStatus.SUCCESS.getCode()).data(user).build();
         } catch (Exception e) {
-            log.error("Failed to login with oauth authorization.", e);
+            Log.error("Failed to login with oauth authorization.", e);
             return this.responseError(e);
         }
     }
@@ -88,10 +94,15 @@ public abstract class AuthDefaultRequest implements AuthRequest {
      */
     private AuthResponse responseError(Exception e) {
         int errorCode = AuthResponseStatus.FAILURE.getCode();
+        String errorMsg = e.getMessage();
         if (e instanceof AuthException) {
-            errorCode = ((AuthException) e).getErrorCode();
+            AuthException authException = ((AuthException) e);
+            errorCode = authException.getErrorCode();
+            if (StringUtils.isNotEmpty(authException.getErrorMsg())) {
+                errorMsg = authException.getErrorMsg();
+            }
         }
-        return AuthResponse.builder().code(errorCode).msg(e.getMessage()).build();
+        return AuthResponse.builder().code(errorCode).msg(errorMsg).build();
     }
 
     /**
@@ -189,7 +200,7 @@ public abstract class AuthDefaultRequest implements AuthRequest {
             state = UuidUtils.getUUID();
         }
         // 缓存state
-        AuthStateCache.cache(state, state);
+        authStateCache.cache(state, state);
         return state;
     }
 
@@ -197,61 +208,87 @@ public abstract class AuthDefaultRequest implements AuthRequest {
      * 通用的 authorizationCode 协议
      *
      * @param code code码
-     * @return HttpResponse
+     * @return Response
      */
-    protected HttpResponse doPostAuthorizationCode(String code) {
-        return HttpRequest.post(accessTokenUrl(code)).execute();
+    protected String doPostAuthorizationCode(String code) {
+        return new HttpUtils(config.getHttpConfig()).post(accessTokenUrl(code));
     }
 
     /**
      * 通用的 authorizationCode 协议
      *
      * @param code code码
-     * @return HttpResponse
+     * @return Response
      */
-    protected HttpResponse doGetAuthorizationCode(String code) {
-        return HttpRequest.get(accessTokenUrl(code)).execute();
+    protected String doGetAuthorizationCode(String code) {
+        return new HttpUtils(config.getHttpConfig()).get(accessTokenUrl(code));
     }
 
     /**
      * 通用的 用户信息
      *
      * @param authToken token封装
-     * @return HttpResponse
+     * @return Response
      */
     @Deprecated
-    protected HttpResponse doPostUserInfo(AuthToken authToken) {
-        return HttpRequest.post(userInfoUrl(authToken)).execute();
+    protected String doPostUserInfo(AuthToken authToken) {
+        return new HttpUtils(config.getHttpConfig()).post(userInfoUrl(authToken));
     }
 
     /**
      * 通用的 用户信息
      *
      * @param authToken token封装
-     * @return HttpResponse
+     * @return Response
      */
-    protected HttpResponse doGetUserInfo(AuthToken authToken) {
-        return HttpRequest.get(userInfoUrl(authToken)).execute();
+    protected String doGetUserInfo(AuthToken authToken) {
+        return new HttpUtils(config.getHttpConfig()).get(userInfoUrl(authToken));
     }
 
     /**
      * 通用的post形式的取消授权方法
      *
      * @param authToken token封装
-     * @return HttpResponse
+     * @return Response
      */
     @Deprecated
-    protected HttpResponse doPostRevoke(AuthToken authToken) {
-        return HttpRequest.post(revokeUrl(authToken)).execute();
+    protected String doPostRevoke(AuthToken authToken) {
+        return new HttpUtils(config.getHttpConfig()).post(revokeUrl(authToken));
     }
 
     /**
      * 通用的post形式的取消授权方法
      *
      * @param authToken token封装
-     * @return HttpResponse
+     * @return Response
      */
-    protected HttpResponse doGetRevoke(AuthToken authToken) {
-        return HttpRequest.get(revokeUrl(authToken)).execute();
+    protected String doGetRevoke(AuthToken authToken) {
+        return new HttpUtils(config.getHttpConfig()).get(revokeUrl(authToken));
     }
+
+    /**
+     * 获取以 {@code separator}分割过后的 scope 信息
+     *
+     * @param separator     多个 {@code scope} 间的分隔符
+     * @param encode        是否 encode 编码
+     * @param defaultScopes 默认的 scope， 当客户端没有配置 {@code scopes} 时启用
+     * @return String
+     * @since 1.16.7
+     */
+    protected String getScopes(String separator, boolean encode, List<String> defaultScopes) {
+        List<String> scopes = config.getScopes();
+        if (null == scopes || scopes.isEmpty()) {
+            if (null == defaultScopes || defaultScopes.isEmpty()) {
+                return "";
+            }
+            scopes = defaultScopes;
+        }
+        if (null == separator) {
+            // 默认为空格
+            separator = " ";
+        }
+        String scopeStr = String.join(separator, scopes);
+        return encode ? UrlUtil.urlEncode(scopeStr) : scopeStr;
+    }
+
 }

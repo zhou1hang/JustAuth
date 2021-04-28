@@ -1,16 +1,21 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
-import lombok.extern.slf4j.Slf4j;
+import com.xkcoding.http.constants.Constants;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
-import me.zhyd.oauth.config.AuthSource;
+import me.zhyd.oauth.config.AuthDefaultSource;
 import me.zhyd.oauth.enums.AuthResponseStatus;
 import me.zhyd.oauth.enums.AuthUserGender;
+import me.zhyd.oauth.enums.scope.AuthMiScope;
 import me.zhyd.oauth.exception.AuthException;
-import me.zhyd.oauth.model.*;
+import me.zhyd.oauth.log.Log;
+import me.zhyd.oauth.model.AuthCallback;
+import me.zhyd.oauth.model.AuthResponse;
+import me.zhyd.oauth.model.AuthToken;
+import me.zhyd.oauth.model.AuthUser;
+import me.zhyd.oauth.utils.AuthScopeUtils;
+import me.zhyd.oauth.utils.HttpUtils;
 import me.zhyd.oauth.utils.UrlBuilder;
 
 import java.text.MessageFormat;
@@ -21,12 +26,15 @@ import java.text.MessageFormat;
  * @author yangkai.shen (https://xkcoding.com)
  * @since 1.5.0
  */
-@Slf4j
 public class AuthMiRequest extends AuthDefaultRequest {
     private static final String PREFIX = "&&&START&&&";
 
     public AuthMiRequest(AuthConfig config) {
-        super(config, AuthSource.MI);
+        super(config, AuthDefaultSource.MI);
+    }
+
+    public AuthMiRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, AuthDefaultSource.MI, authStateCache);
     }
 
     @Override
@@ -35,8 +43,8 @@ public class AuthMiRequest extends AuthDefaultRequest {
     }
 
     private AuthToken getToken(String accessTokenUrl) {
-        HttpResponse response = HttpRequest.get(accessTokenUrl).execute();
-        String jsonStr = StrUtil.replace(response.body(), PREFIX, StrUtil.EMPTY);
+        String response = new HttpUtils(config.getHttpConfig()).get(accessTokenUrl);
+        String jsonStr = response.replace(PREFIX, Constants.EMPTY);
         JSONObject accessTokenObject = JSONObject.parseObject(jsonStr);
 
         if (accessTokenObject.containsKey("error")) {
@@ -58,37 +66,38 @@ public class AuthMiRequest extends AuthDefaultRequest {
     @Override
     protected AuthUser getUserInfo(AuthToken authToken) {
         // 获取用户信息
-        HttpResponse userResponse = doGetUserInfo(authToken);
+        String userResponse = doGetUserInfo(authToken);
 
-        JSONObject userProfile = JSONObject.parseObject(userResponse.body());
+        JSONObject userProfile = JSONObject.parseObject(userResponse);
         if ("error".equalsIgnoreCase(userProfile.getString("result"))) {
             throw new AuthException(userProfile.getString("description"));
         }
 
-        JSONObject user = userProfile.getJSONObject("data");
+        JSONObject object = userProfile.getJSONObject("data");
 
         AuthUser authUser = AuthUser.builder()
+            .rawUserInfo(object)
             .uuid(authToken.getOpenId())
-            .username(user.getString("miliaoNick"))
-            .nickname(user.getString("miliaoNick"))
-            .avatar(user.getString("miliaoIcon"))
-            .email(user.getString("mail"))
+            .username(object.getString("miliaoNick"))
+            .nickname(object.getString("miliaoNick"))
+            .avatar(object.getString("miliaoIcon"))
+            .email(object.getString("mail"))
             .gender(AuthUserGender.UNKNOWN)
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
 
         // 获取用户邮箱手机号等信息
         String emailPhoneUrl = MessageFormat.format("{0}?clientId={1}&token={2}", "https://open.account.xiaomi.com/user/phoneAndEmail", config
             .getClientId(), authToken.getAccessToken());
 
-        HttpResponse emailResponse = HttpRequest.get(emailPhoneUrl).execute();
-        JSONObject userEmailPhone = JSONObject.parseObject(emailResponse.body());
+        String emailResponse = new HttpUtils(config.getHttpConfig()).get(emailPhoneUrl);
+        JSONObject userEmailPhone = JSONObject.parseObject(emailResponse);
         if (!"error".equalsIgnoreCase(userEmailPhone.getString("result"))) {
             JSONObject emailPhone = userEmailPhone.getJSONObject("data");
             authUser.setEmail(emailPhone.getString("email"));
         } else {
-            log.warn("小米开发平台暂时不对外开放用户手机及邮箱信息的获取");
+            Log.warn("小米开发平台暂时不对外开放用户手机及邮箱信息的获取");
         }
 
         return authUser;
@@ -117,13 +126,9 @@ public class AuthMiRequest extends AuthDefaultRequest {
      */
     @Override
     public String authorize(String state) {
-        return UrlBuilder.fromBaseUrl(source.authorize())
-            .queryParam("response_type", "code")
-            .queryParam("client_id", config.getClientId())
-            .queryParam("redirect_uri", config.getRedirectUri())
-            .queryParam("scope", "user/profile%20user/openIdV2%20user/phoneAndEmail")
+        return UrlBuilder.fromBaseUrl(super.authorize(state))
             .queryParam("skip_confirm", "false")
-            .queryParam("state", getRealState(state))
+            .queryParam("scope", this.getScopes(" ", true, AuthScopeUtils.getDefaultScopes(AuthMiScope.values())))
             .build();
     }
 

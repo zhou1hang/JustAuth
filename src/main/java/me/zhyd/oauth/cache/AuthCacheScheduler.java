@@ -13,6 +13,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public enum AuthCacheScheduler {
 
+    /**
+     * 当前实例
+     */
     INSTANCE;
 
     private AtomicInteger cacheTaskNumber = new AtomicInteger(1);
@@ -27,7 +30,7 @@ public enum AuthCacheScheduler {
         this.scheduler = new ScheduledThreadPoolExecutor(10, r -> new Thread(r, String.format("JustAuth-Task-%s", cacheTaskNumber.getAndIncrement())));
     }
 
-    private void shutdown() {
+    public void shutdown() {
         if (null != scheduler) {
             this.scheduler.shutdown();
         }

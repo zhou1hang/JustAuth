@@ -1,9 +1,9 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
-import me.zhyd.oauth.config.AuthSource;
+import me.zhyd.oauth.config.AuthDefaultSource;
 import me.zhyd.oauth.enums.AuthToutiaoErrorCode;
 import me.zhyd.oauth.enums.AuthUserGender;
 import me.zhyd.oauth.exception.AuthException;
@@ -21,13 +21,17 @@ import me.zhyd.oauth.utils.UrlBuilder;
 public class AuthToutiaoRequest extends AuthDefaultRequest {
 
     public AuthToutiaoRequest(AuthConfig config) {
-        super(config, AuthSource.TOUTIAO);
+        super(config, AuthDefaultSource.TOUTIAO);
+    }
+
+    public AuthToutiaoRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, AuthDefaultSource.TOUTIAO, authStateCache);
     }
 
     @Override
     protected AuthToken getAccessToken(AuthCallback authCallback) {
-        HttpResponse response = doGetAuthorizationCode(authCallback.getCode());
-        JSONObject accessTokenObject = JSONObject.parseObject(response.body());
+        String response = doGetAuthorizationCode(authCallback.getCode());
+        JSONObject accessTokenObject = JSONObject.parseObject(response);
 
         this.checkResponse(accessTokenObject);
 
@@ -40,9 +44,9 @@ public class AuthToutiaoRequest extends AuthDefaultRequest {
 
     @Override
     protected AuthUser getUserInfo(AuthToken authToken) {
-        HttpResponse userResponse = doGetUserInfo(authToken);
+        String userResponse = doGetUserInfo(authToken);
 
-        JSONObject userProfile = JSONObject.parseObject(userResponse.body());
+        JSONObject userProfile = JSONObject.parseObject(userResponse);
 
         this.checkResponse(userProfile);
 
@@ -52,6 +56,7 @@ public class AuthToutiaoRequest extends AuthDefaultRequest {
         String anonymousUserName = "匿名用户";
 
         return AuthUser.builder()
+            .rawUserInfo(user)
             .uuid(user.getString("uid"))
             .username(isAnonymousUser ? anonymousUserName : user.getString("screen_name"))
             .nickname(isAnonymousUser ? anonymousUserName : user.getString("screen_name"))
@@ -59,7 +64,7 @@ public class AuthToutiaoRequest extends AuthDefaultRequest {
             .remark(user.getString("description"))
             .gender(AuthUserGender.getRealGender(user.getString("gender")))
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 
@@ -119,8 +124,7 @@ public class AuthToutiaoRequest extends AuthDefaultRequest {
      */
     private void checkResponse(JSONObject object) {
         if (object.containsKey("error_code")) {
-            throw new AuthException(AuthToutiaoErrorCode.getErrorCode(object.getIntValue("error_code"))
-                .getDesc());
+            throw new AuthException(AuthToutiaoErrorCode.getErrorCode(object.getIntValue("error_code")).getDesc());
         }
     }
 }

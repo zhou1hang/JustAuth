@@ -1,15 +1,15 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
-import me.zhyd.oauth.config.AuthSource;
+import me.zhyd.oauth.config.AuthDefaultSource;
 import me.zhyd.oauth.enums.AuthUserGender;
 import me.zhyd.oauth.exception.AuthException;
 import me.zhyd.oauth.model.AuthCallback;
 import me.zhyd.oauth.model.AuthToken;
 import me.zhyd.oauth.model.AuthUser;
-import me.zhyd.oauth.utils.GlobalAuthUtil;
+import me.zhyd.oauth.utils.GlobalAuthUtils;
 import me.zhyd.oauth.utils.UrlBuilder;
 
 /**
@@ -21,7 +21,11 @@ import me.zhyd.oauth.utils.UrlBuilder;
 public class AuthTaobaoRequest extends AuthDefaultRequest {
 
     public AuthTaobaoRequest(AuthConfig config) {
-        super(config, AuthSource.TAOBAO);
+        super(config, AuthDefaultSource.TAOBAO);
+    }
+
+    public AuthTaobaoRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, AuthDefaultSource.TAOBAO, authStateCache);
     }
 
     @Override
@@ -31,8 +35,8 @@ public class AuthTaobaoRequest extends AuthDefaultRequest {
 
     @Override
     protected AuthUser getUserInfo(AuthToken authToken) {
-        HttpResponse response = doPostAuthorizationCode(authToken.getAccessCode());
-        JSONObject accessTokenObject = JSONObject.parseObject(response.body());
+        String response = doPostAuthorizationCode(authToken.getAccessCode());
+        JSONObject accessTokenObject = JSONObject.parseObject(response);
         if (accessTokenObject.containsKey("error")) {
             throw new AuthException(accessTokenObject.getString("error_description"));
         }
@@ -42,14 +46,15 @@ public class AuthTaobaoRequest extends AuthDefaultRequest {
         authToken.setUid(accessTokenObject.getString("taobao_user_id"));
         authToken.setOpenId(accessTokenObject.getString("taobao_open_uid"));
 
-        String nick = GlobalAuthUtil.urlDecode(accessTokenObject.getString("taobao_user_nick"));
+        String nick = GlobalAuthUtils.urlDecode(accessTokenObject.getString("taobao_user_nick"));
         return AuthUser.builder()
+            .rawUserInfo(new JSONObject())
             .uuid(accessTokenObject.getString("taobao_user_id"))
             .username(nick)
             .nickname(nick)
             .gender(AuthUserGender.UNKNOWN)
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 

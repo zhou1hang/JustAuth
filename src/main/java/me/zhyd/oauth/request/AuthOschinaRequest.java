@@ -1,9 +1,9 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
-import me.zhyd.oauth.config.AuthSource;
+import me.zhyd.oauth.config.AuthDefaultSource;
 import me.zhyd.oauth.enums.AuthUserGender;
 import me.zhyd.oauth.exception.AuthException;
 import me.zhyd.oauth.model.AuthCallback;
@@ -20,13 +20,17 @@ import me.zhyd.oauth.utils.UrlBuilder;
 public class AuthOschinaRequest extends AuthDefaultRequest {
 
     public AuthOschinaRequest(AuthConfig config) {
-        super(config, AuthSource.OSCHINA);
+        super(config, AuthDefaultSource.OSCHINA);
+    }
+
+    public AuthOschinaRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, AuthDefaultSource.OSCHINA, authStateCache);
     }
 
     @Override
     protected AuthToken getAccessToken(AuthCallback authCallback) {
-        HttpResponse response = doPostAuthorizationCode(authCallback.getCode());
-        JSONObject accessTokenObject = JSONObject.parseObject(response.body());
+        String response = doPostAuthorizationCode(authCallback.getCode());
+        JSONObject accessTokenObject = JSONObject.parseObject(response);
         this.checkResponse(accessTokenObject);
         return AuthToken.builder()
             .accessToken(accessTokenObject.getString("access_token"))
@@ -38,10 +42,11 @@ public class AuthOschinaRequest extends AuthDefaultRequest {
 
     @Override
     protected AuthUser getUserInfo(AuthToken authToken) {
-        HttpResponse response = doGetUserInfo(authToken);
-        JSONObject object = JSONObject.parseObject(response.body());
+        String response = doGetUserInfo(authToken);
+        JSONObject object = JSONObject.parseObject(response);
         this.checkResponse(object);
         return AuthUser.builder()
+            .rawUserInfo(object)
             .uuid(object.getString("id"))
             .username(object.getString("name"))
             .nickname(object.getString("name"))
@@ -51,7 +56,7 @@ public class AuthOschinaRequest extends AuthDefaultRequest {
             .gender(AuthUserGender.getRealGender(object.getString("gender")))
             .email(object.getString("email"))
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 

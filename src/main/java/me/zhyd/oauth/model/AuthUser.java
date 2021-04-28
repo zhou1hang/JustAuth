@@ -1,10 +1,9 @@
 package me.zhyd.oauth.model;
 
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
-import me.zhyd.oauth.config.AuthSource;
+import com.alibaba.fastjson.JSONObject;
+import lombok.*;
 import me.zhyd.oauth.enums.AuthUserGender;
+import java.io.Serializable;
 
 /**
  * 授权成功后的用户信息，根据授权平台的不同，获取的数据完整性也不同
@@ -15,9 +14,11 @@ import me.zhyd.oauth.enums.AuthUserGender;
 @Getter
 @Setter
 @Builder
-public class AuthUser {
+@NoArgsConstructor
+@AllArgsConstructor
+public class AuthUser implements Serializable {
     /**
-     * 用户第三方系统的唯一id。在调用方集成改组件时，可以用uuid + source唯一确定一个用户
+     * 用户第三方系统的唯一id。在调用方集成该组件时，可以用uuid + source唯一确定一个用户
      *
      * @since 1.3.3
      */
@@ -61,9 +62,14 @@ public class AuthUser {
     /**
      * 用户来源
      */
-    private AuthSource source;
+    private String source;
     /**
      * 用户授权的token信息
      */
     private AuthToken token;
+    /**
+     * 第三方平台返回的原始用户信息
+     */
+    private JSONObject rawUserInfo;
+
 }

@@ -6,13 +6,12 @@
 
   <groupId>me.zhyd.oauth</groupId>
   <artifactId>JustAuth</artifactId>
-  <version>1.9.5</version>
+  <version>1.16.1</version>
 
   <name>JustAuth</name>
   <url>https://gitee.com/yadong.zhang/JustAuth</url>
   <description>
-    史上最全的整合第三方登录的工具,目前已支持Github、Gitee、微博、钉钉、百度、Coding、腾讯云开发者平台、OSChina、支付宝、QQ、微信、淘宝、Google、Facebook、抖音、领英、小米、微软和今日头条等第三方平台的授权登录。
-    Login, so easy!
+    小而全而美的第三方登录开源组件。目前已支持Github、Gitee、微博、钉钉、百度、Coding、腾讯云开发者平台、OSChina、支付宝、QQ、微信、淘宝、Google、Facebook、抖音、领英、小米、微软、今日头条、Teambition、StackOverflow、Pinterest、人人、华为、企业微信、酷家乐、Gitlab、美团、饿了么、推特、飞书、京东、阿里云、喜马拉雅、Amazon、Slack和Line等第三方平台的授权登录。 Login, so easy!
   </description>
 
   <licenses>
@@ -53,17 +52,16 @@
     <maven.compiler.target>1.8</maven.compiler.target>
     <maven-source.version>2.2.1</maven-source.version>
     <maven-compiler.version>3.8.1</maven-compiler.version>
-    <maven-javadoc.version>3.1.0</maven-javadoc.version>
+    <maven-javadoc.version>2.9.1</maven-javadoc.version>
     <cobertura-version>2.7</cobertura-version>
     <maven-surefire-version>2.20</maven-surefire-version>
     <maven-gpg-version>1.6</maven-gpg-version>
     <maven.test.skip>false</maven.test.skip>
-    <hutool-version>4.6.1</hutool-version>
-    <lombok-version>1.18.4</lombok-version>
-    <junit-version>4.11</junit-version>
-    <fastjson-version>1.2.58</fastjson-version>
-    <alipay-sdk-version>3.7.4.ALL</alipay-sdk-version>
-    <slf4j-version>1.7.25</slf4j-version>
+    <simple-http.version>1.0.3</simple-http.version>
+    <lombok-version>1.18.10</lombok-version>
+    <junit-version>4.13.1</junit-version>
+    <fastjson-version>1.2.76</fastjson-version>
+    <alipay-sdk-version>4.8.10.ALL</alipay-sdk-version>
     <jacoco-version>0.8.2</jacoco-version>
   </properties>
 
@@ -75,9 +73,9 @@
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>cn.hutool</groupId>
-      <artifactId>hutool-http</artifactId>
-      <version>${hutool-version}</version>
+      <groupId>com.xkcoding.http</groupId>
+      <artifactId>simple-http</artifactId>
+      <version>${simple-http.version}</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
@@ -95,11 +93,6 @@
       <artifactId>alipay-sdk-java</artifactId>
       <version>${alipay-sdk-version}</version>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-simple</artifactId>
-      <version>${slf4j-version}</version>
     </dependency>
   </dependencies>
 
@@ -142,6 +135,9 @@
             </goals>
           </execution>
         </executions>
+        <configuration>
+            <additionalparam>${javadoc.opts}</additionalparam>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -165,65 +161,65 @@
       <id>release</id>
       <build>
         <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-source-plugin</artifactId>
-            <version>${maven-source.version}</version>
-            <inherited>true</inherited>
-            <executions>
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>jar-no-fork</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>cobertura-maven-plugin</artifactId>
-            <version>${cobertura-version}</version>
-            <configuration>
-              <formats>
-                <format>html</format>
-                <format>xml</format>
-              </formats>
-              <check/>
-            </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.jacoco</groupId>
-            <artifactId>jacoco-maven-plugin</artifactId>
-            <version>${jacoco-version}</version>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>prepare-agent</goal>
-                </goals>
-              </execution>
-              <execution>
-                <id>report</id>
-                <phase>test</phase>
-                <goals>
-                  <goal>report</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-gpg-plugin</artifactId>
-            <version>${maven-gpg-version}</version>
-            <executions>
-              <execution>
-                <phase>verify</phase>
-                <goals>
-                  <goal>sign</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-source-plugin</artifactId>
+              <version>${maven-source.version}</version>
+              <inherited>true</inherited>
+              <executions>
+                <execution>
+                  <phase>package</phase>
+                  <goals>
+                    <goal>jar-no-fork</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+            <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>cobertura-maven-plugin</artifactId>
+              <version>${cobertura-version}</version>
+              <configuration>
+                <formats>
+                  <format>html</format>
+                  <format>xml</format>
+                </formats>
+                <check/>
+              </configuration>
+            </plugin>
+            <plugin>
+              <groupId>org.jacoco</groupId>
+              <artifactId>jacoco-maven-plugin</artifactId>
+              <version>${jacoco-version}</version>
+              <executions>
+                <execution>
+                  <goals>
+                    <goal>prepare-agent</goal>
+                  </goals>
+                </execution>
+                <execution>
+                  <id>report</id>
+                  <phase>test</phase>
+                  <goals>
+                    <goal>report</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-gpg-plugin</artifactId>
+              <version>${maven-gpg-version}</version>
+              <executions>
+                <execution>
+                  <phase>verify</phase>
+                  <goals>
+                    <goal>sign</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
       </build>
       <distributionManagement>
         <snapshotRepository>
@@ -235,6 +231,47 @@
           <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
         </repository>
       </distributionManagement>
+    </profile>
+    <!--私服-->
+    <profile>
+      <id>nexus</id>
+      <build>
+        <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-gpg-plugin</artifactId>
+              <version>${maven-gpg-version}</version>
+              <executions>
+                <execution>
+                  <phase>verify</phase>
+                  <goals>
+                    <goal>sign</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+      </build>
+      <distributionManagement>
+        <repository>
+          <id>xkcoding-nexus</id>
+          <url>https://nexus.xkcoding.com/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+          <id>xkcoding-nexus</id>
+          <url>https://nexus.xkcoding.com/repository/maven-snapshots/</url>
+        </snapshotRepository>
+      </distributionManagement>
+    </profile>
+    <!-- 禁用 Javadoc 注释检查 -->
+    <profile>
+        <id>disable-javadoc-doclint</id>
+        <activation>
+            <jdk>[1.8,)</jdk>
+        </activation>
+        <properties>
+            <javadoc.opts>-Xdoclint:none</javadoc.opts>
+        </properties>
     </profile>
   </profiles>
 </project>

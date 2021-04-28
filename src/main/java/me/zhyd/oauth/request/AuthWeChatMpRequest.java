@@ -1,25 +1,35 @@
 package me.zhyd.oauth.request;
 
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
 import com.alibaba.fastjson.JSONObject;
+import me.zhyd.oauth.cache.AuthStateCache;
 import me.zhyd.oauth.config.AuthConfig;
-import me.zhyd.oauth.config.AuthSource;
+import me.zhyd.oauth.config.AuthDefaultSource;
 import me.zhyd.oauth.enums.AuthResponseStatus;
 import me.zhyd.oauth.enums.AuthUserGender;
+import me.zhyd.oauth.enums.scope.AuthWechatMpScope;
 import me.zhyd.oauth.exception.AuthException;
-import me.zhyd.oauth.model.*;
+import me.zhyd.oauth.model.AuthCallback;
+import me.zhyd.oauth.model.AuthResponse;
+import me.zhyd.oauth.model.AuthToken;
+import me.zhyd.oauth.model.AuthUser;
+import me.zhyd.oauth.utils.AuthScopeUtils;
+import me.zhyd.oauth.utils.GlobalAuthUtils;
+import me.zhyd.oauth.utils.HttpUtils;
 import me.zhyd.oauth.utils.UrlBuilder;
 
 /**
- * 微信登录
+ * 微信公众平台登录
  *
  * @author yangkai.shen (https://xkcoding.com)
  * @since 1.1.0
  */
-public class AuthWeChatRequest extends AuthDefaultRequest {
-    public AuthWeChatRequest(AuthConfig config) {
-        super(config, AuthSource.WECHAT);
+public class AuthWeChatMpRequest extends AuthDefaultRequest {
+    public AuthWeChatMpRequest(AuthConfig config) {
+        super(config, AuthDefaultSource.WECHAT_MP);
+    }
+
+    public AuthWeChatMpRequest(AuthConfig config, AuthStateCache authStateCache) {
+        super(config, AuthDefaultSource.WECHAT_MP, authStateCache);
     }
 
     /**
@@ -37,8 +47,8 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
     protected AuthUser getUserInfo(AuthToken authToken) {
         String openId = authToken.getOpenId();
 
-        HttpResponse response = doGetUserInfo(authToken);
-        JSONObject object = JSONObject.parseObject(response.body());
+        String response = doGetUserInfo(authToken);
+        JSONObject object = JSONObject.parseObject(response);
 
         this.checkResponse(object);
 
@@ -49,14 +59,15 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
         }
 
         return AuthUser.builder()
+            .rawUserInfo(object)
             .username(object.getString("nickname"))
             .nickname(object.getString("nickname"))
             .avatar(object.getString("headimgurl"))
             .location(location)
             .uuid(openId)
-            .gender(AuthUserGender.getRealGender(object.getString("sex")))
+            .gender(AuthUserGender.getWechatRealGender(object.getString("sex")))
             .token(authToken)
-            .source(source)
+            .source(source.toString())
             .build();
     }
 
@@ -86,8 +97,8 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
      * @return token对象
      */
     private AuthToken getToken(String accessTokenUrl) {
-        HttpResponse response = HttpRequest.get(accessTokenUrl).execute();
-        JSONObject accessTokenObject = JSONObject.parseObject(response.body());
+        String response = new HttpUtils(config.getHttpConfig()).get(accessTokenUrl);
+        JSONObject accessTokenObject = JSONObject.parseObject(response);
 
         this.checkResponse(accessTokenObject);
 
@@ -96,6 +107,7 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
             .refreshToken(accessTokenObject.getString("refresh_token"))
             .expireIn(accessTokenObject.getIntValue("expires_in"))
             .openId(accessTokenObject.getString("openid"))
+            .scope(accessTokenObject.getString("scope"))
             .build();
     }
 
@@ -109,11 +121,11 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
     @Override
     public String authorize(String state) {
         return UrlBuilder.fromBaseUrl(source.authorize())
-            .queryParam("response_type", "code")
             .queryParam("appid", config.getClientId())
-            .queryParam("redirect_uri", config.getRedirectUri())
-            .queryParam("scope", "snsapi_login")
-            .queryParam("state", getRealState(state))
+            .queryParam("redirect_uri", GlobalAuthUtils.urlEncode(config.getRedirectUri()))
+            .queryParam("response_type", "code")
+            .queryParam("scope", this.getScopes(",", false, AuthScopeUtils.getDefaultScopes(AuthWechatMpScope.values())))
+            .queryParam("state", getRealState(state).concat("#wechat_redirect"))
             .build();
     }
 
@@ -126,9 +138,9 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
     @Override
     protected String accessTokenUrl(String code) {
         return UrlBuilder.fromBaseUrl(source.accessToken())
-            .queryParam("code", code)
             .queryParam("appid", config.getClientId())
             .queryParam("secret", config.getClientSecret())
+            .queryParam("code", code)
             .queryParam("grant_type", "authorization_code")
             .build();
     }
@@ -158,8 +170,8 @@ public class AuthWeChatRequest extends AuthDefaultRequest {
     protected String refreshTokenUrl(String refreshToken) {
         return UrlBuilder.fromBaseUrl(source.refresh())
             .queryParam("appid", config.getClientId())
-            .queryParam("refresh_token", refreshToken)
             .queryParam("grant_type", "refresh_token")
+            .queryParam("refresh_token", refreshToken)
             .build();
     }
 }
